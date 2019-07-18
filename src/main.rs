@@ -55,8 +55,8 @@ fn resque_stats(client: web::Data<redis::Client>) -> actix_web::Result<HttpRespo
             .map_err(resque_error_map)?
             .into_iter()
             .collect(),
-        success_count: resque::processed_count(&mut con).map_err(resque_error_map)?,
-        failure_count: resque::failure_count(&mut con).map_err(resque_error_map)?,
+        success_count: resque::processed_count(&mut con),
+        failure_count: resque::failure_count(&mut con),
     };
     Ok(HttpResponse::Ok().json(response))
 }

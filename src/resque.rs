@@ -18,12 +18,12 @@ pub fn get_queues(con: &mut redis::Connection) -> redis::RedisResult<HashSet<Str
   con.smembers("resque:queues")
 }
 
-pub fn failure_count(con: &mut redis::Connection) -> redis::RedisResult<u64> {
-  con.get("resque:stat:failed")
+pub fn failure_count(con: &mut redis::Connection) -> u64 {
+  con.get("resque:stat:failed").unwrap_or(0)
 }
 
-pub fn processed_count(con: &mut redis::Connection) -> redis::RedisResult<u64> {
-  con.get("resque:stat:processed")
+pub fn processed_count(con: &mut redis::Connection) -> u64 {
+  con.get("resque:stat:processed").unwrap_or(0)
 }
 
 pub fn get_failed(

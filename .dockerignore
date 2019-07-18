@@ -1,0 +1,6 @@
+/public
+/target
+README.md
+.gitignore
+/web-app/node_modules
+/web-app/build
