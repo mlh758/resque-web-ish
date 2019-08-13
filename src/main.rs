@@ -150,9 +150,38 @@ fn home() -> actix_web::Result<fs::NamedFile> {
     Ok(fs::NamedFile::open("./public/index.html")?)
 }
 
+fn get_redis_passwd() -> Option<String> {
+    match std::env::var("REDIS_PASSWORD") {
+        Ok(val) => Some(val),
+        Err(_) => None,
+    }
+}
+
+fn get_detailed_connection() -> redis::RedisResult<redis::Client> {
+    let addr = std::env::var("REDIS_HOSTNAME").unwrap_or("".to_string());
+    let port: u16 = std::env::var("REDIS_PORT")
+        .unwrap_or("".to_string())
+        .parse()
+        .unwrap_or(0);
+    let passwd = get_redis_passwd();
+    let db: i64 = std::env::var("REDIS_DATABASE")
+        .unwrap_or("".to_string())
+        .parse()
+        .unwrap_or(0);
+    let con_addr = redis::ConnectionAddr::Tcp(addr, port);
+    let conn_info = redis::ConnectionInfo {
+        db: db,
+        addr: Box::new(con_addr),
+        passwd: passwd,
+    };
+    redis::Client::open(conn_info)
+}
+
 fn create_redis_client() -> redis::RedisResult<redis::Client> {
-    let con_string = std::env::var("REDIS_CONNECTION_STRING").unwrap_or("".to_string());
-    redis::Client::open(con_string.as_ref())
+    match std::env::var("REDIS_CONNECTION_STRING") {
+        Ok(val) => redis::Client::open(val.as_ref()),
+        Err(_) => get_detailed_connection(),
+    }
 }
 
 fn main() {
@@ -175,7 +204,7 @@ fn main() {
                     .service(delete_failed_jobs)
                     .service(delete_queue_contents)
                     .service(delete_failed_job)
-                    .route("/{filename:.*}", web::get().to(index)),
+                    .route("{filename:.*}", web::get().to(index)),
             )
 
     })
