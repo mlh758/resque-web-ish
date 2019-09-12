@@ -95,7 +95,7 @@ const FailedContent: React.FC = () => {
         </Grid>
         <Grid item xs={12}>
           <List>
-            {failedJobs.jobs.map(item => <FailedRow job={item} onJobDeleted={handleJobDeleted} key={item.payload.args[0].job_id} />)}
+            {failedJobs.jobs.map(item => <FailedRow job={item} onJobDeleted={handleJobDeleted} onJobRetried={handleJobDeleted} key={item.payload.args[0].job_id} />)}
           </List>
         </Grid>
       </Grid>

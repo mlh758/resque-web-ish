@@ -113,6 +113,13 @@ fn delete_failed_jobs(client: web::Data<redis::Client>) -> actix_web::Result<Htt
     Ok(HttpResponse::Ok().body(deleted.to_string()))
 }
 
+#[post("/retry_job")]
+fn retry_failed_job(job: web::Json<DeleteFailedParam>, client: web::Data<redis::Client>) -> actix_web::Result<HttpResponse> {
+    let mut con = get_redis_connection(&client)?;
+    resque::retry_failed_job(&mut con, &job.id).map_err(resque_error_map)?;
+    Ok(HttpResponse::Ok().body("job retried"))
+}
+
 #[delete("/failed_job")]
 fn delete_failed_job(
     job: web::Json<DeleteFailedParam>,
@@ -134,7 +141,7 @@ fn delete_queue_contents(
     Ok(HttpResponse::Ok().body(deleted.to_string()))
 }
 
-fn index(req: HttpRequest) -> actix_web::Result<fs::NamedFile> {
+fn static_assets(req: HttpRequest) -> actix_web::Result<fs::NamedFile> {
     let path: std::path::PathBuf = req
         .match_info()
         .query("filename")
@@ -204,7 +211,8 @@ fn main() {
                     .service(delete_failed_jobs)
                     .service(delete_queue_contents)
                     .service(delete_failed_job)
-                    .route("{filename:.*}", web::get().to(index)),
+                    .service(retry_failed_job)
+                    .route("{filename:.*}", web::get().to(static_assets)),
             )
 
     })

@@ -7,6 +7,7 @@ import ExpansionPanelActions from '@material-ui/core/ExpansionPanelActions';
 import Typography from '@material-ui/core/Typography';
 import Grid from '@material-ui/core/Grid';
 import DeleteIcon from '@material-ui/icons/Delete';
+import RefreshIcon from '@material-ui/icons/Refresh';
 import IconButton from '@material-ui/core/IconButton';
 import ExpandMoreIcon from '@material-ui/icons/ExpandMore';
 import { QueueJob, renderArguments } from '../utils/jobArgs';
@@ -23,6 +24,7 @@ export interface FailedJob {
 interface FailedProps {
   job: FailedJob,
   onJobDeleted(id: string): void,
+  onJobRetried(id: string): void,
 }
 
 const useStyles = makeStyles((theme: Theme) =>
@@ -54,22 +56,45 @@ function trimmedError(err: string): string {
   return spacedErr;
 }
 
-const FailedRow: React.FC<FailedProps> = ({ job, onJobDeleted }) => {
+interface RequestBody {
+  method: string,
+  headers: Record<string, string>,
+  body: string,
+}
+
+function request(jobID: string, method: string): RequestBody {
+  return {
+    method: method,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id: jobID }),
+  }
+}
+
+const FailedRow: React.FC<FailedProps> = ({ job, onJobDeleted, onJobRetried }) => {
   const classes = useStyles()
   const [deleting, setDeleting] = React.useState(false);
+  const [retrying, setRetrying] = React.useState(false);
   const handleDeleteJob = () => {
     const jobID = job.payload.args[0].job_id;
     setDeleting(true);
-    fetch("/failed_job", {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id: jobID }),
-    }).then((response) => {
+    fetch("failed_job", request(jobID, 'DELETE')).then((response) => {
       if (response.ok) {
         onJobDeleted(jobID);
       } else {
         console.error(`unable to delete job ${jobID}`)
         setDeleting(false);
+      }
+    });
+  }
+  const handleRetryJob = () => {
+    const jobID = job.payload.args[0].job_id;
+    setRetrying(true);
+    fetch("retry_job", request(jobID, 'POST')).then((response) => {
+      if (response.ok) {
+        onJobRetried(jobID);
+      } else {
+        console.error(`unable to retry job ${jobID}`)
+        setRetrying(false);
       }
     });
   }
@@ -104,6 +129,9 @@ const FailedRow: React.FC<FailedProps> = ({ job, onJobDeleted }) => {
         <ExpansionPanelActions>
           <IconButton color="secondary" onClick={handleDeleteJob} disabled={deleting}>
             <DeleteIcon />
+          </IconButton>
+          <IconButton onClick={handleRetryJob} disabled={retrying}>
+            <RefreshIcon />
           </IconButton>
         </ExpansionPanelActions>
       </ExpansionPanel>
