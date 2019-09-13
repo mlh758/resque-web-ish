@@ -114,7 +114,10 @@ fn delete_failed_jobs(client: web::Data<redis::Client>) -> actix_web::Result<Htt
 }
 
 #[post("/retry_job")]
-fn retry_failed_job(job: web::Json<DeleteFailedParam>, client: web::Data<redis::Client>) -> actix_web::Result<HttpResponse> {
+fn retry_failed_job(
+    job: web::Json<DeleteFailedParam>,
+    client: web::Data<redis::Client>,
+) -> actix_web::Result<HttpResponse> {
     let mut con = get_redis_connection(&client)?;
     resque::retry_failed_job(&mut con, &job.id).map_err(resque_error_map)?;
     Ok(HttpResponse::Ok().body("job retried"))
@@ -154,7 +157,8 @@ fn static_assets(req: HttpRequest) -> actix_web::Result<fs::NamedFile> {
 
 #[get("/")]
 fn home() -> actix_web::Result<fs::NamedFile> {
-    Ok(fs::NamedFile::open("./public/index.html")?)
+    let file = fs::NamedFile::open("./public/index.html")?;
+    Ok(file.use_last_modified(true))
 }
 
 fn get_redis_passwd() -> Option<String> {
