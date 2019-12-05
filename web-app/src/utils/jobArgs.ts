@@ -17,6 +17,8 @@ const renderArguments = (args: ArgList) => {
     if (Array.isArray(val)) {
       const cutoff = Math.min(val.length, 10);
       nextVal = `[${val.slice(0, cutoff).join(", ")}${cutoff < val.length ? "..." : ""}]`
+    } else if (val === null || val === undefined) {
+      nextVal = "null"
     } else {
       nextVal = val.toString();
     }

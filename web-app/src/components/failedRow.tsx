@@ -109,6 +109,7 @@ const FailedRow: React.FC<FailedProps> = ({ job, onJobDeleted, onJobRetried }) =
             </Grid>
             <Grid item xs={8}>
               <Typography variant="body2" color="secondary">{trimmedError(job.error)}</Typography>
+              <Typography variant="body2">{job.failed_at}</Typography>
             </Grid>
           </Grid>
         </ExpansionPanelSummary>
