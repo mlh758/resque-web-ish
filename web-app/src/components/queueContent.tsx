@@ -73,7 +73,7 @@ const QueueContent: React.FC<ContentProp> = ({ queue }) => {
   const atMinJob = () => firstJob === 0;
 
   useEffect(() => {
-    fetch(`queue/${queue}?first_job=${firstJob}`).then((response) => response.json()).then((data) => setJobs(data));
+    fetch(`queue/${queue}?from_job=${firstJob}`).then((response) => response.json()).then((data) => setJobs(data));
   }, [firstJob, queue])
 
   const renderControls = () => {

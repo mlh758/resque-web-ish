@@ -123,6 +123,13 @@ fn retry_failed_job(
     Ok(HttpResponse::Ok().body("job retried"))
 }
 
+#[post("/retry_all")]
+fn retry_all(client: web::Data<redis::Client>) -> actix_web::Result<HttpResponse> {
+    let mut con = get_redis_connection(&client)?;
+    resque::retry_all_jobs(&mut con).map_err(resque_error_map)?;
+    Ok(HttpResponse::Ok().body("all jobs retried"))
+}
+
 #[delete("/failed_job")]
 fn delete_failed_job(
     job: web::Json<DeleteFailedParam>,
@@ -216,9 +223,9 @@ fn main() {
                     .service(delete_queue_contents)
                     .service(delete_failed_job)
                     .service(retry_failed_job)
+                    .service(retry_all)
                     .route("{filename:.*}", web::get().to(static_assets)),
             )
-
     })
     .bind("0.0.0.0:8080")
     .expect("unable to bind server")

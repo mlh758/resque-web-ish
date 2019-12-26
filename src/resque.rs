@@ -96,6 +96,18 @@ pub fn retry_failed_job(con: &mut redis::Connection, job: &str) -> redis::RedisR
   Ok(1)
 }
 
+pub fn retry_all_jobs(con: &mut redis::Connection) -> redis::RedisResult<isize> {
+  let key = "resque:failed";
+  let fail_count = con.llen(key)?;
+  let jobs: Vec<String> = con.lrange(key, 0, fail_count)?;
+  for job in jobs.iter() {
+    let job_payload: FailedJob = serde_json::from_str(job.as_str()).map_err(json_failed)?;
+    con.rpush("resque:queue:default", job_payload.payload.to_string())?;
+  }
+  clear_queue(con, "failed")?;
+  Ok(1)
+}
+
 fn json_failed(_err: serde_json::Error) -> redis::RedisError {
   std::convert::From::from((ErrorKind::IoError, "failed to parse job json"))
 }

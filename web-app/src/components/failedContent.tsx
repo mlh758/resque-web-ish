@@ -3,6 +3,7 @@ import { createStyles, makeStyles, Theme } from '@material-ui/core/styles';
 import Grid from '@material-ui/core/Grid';
 import Button from '@material-ui/core/Button';
 import DeleteIcon from '@material-ui/icons/Delete';
+import RefreshIcon from '@material-ui/icons/Refresh';
 import Typography from '@material-ui/core/Typography';
 import List from '@material-ui/core/List';
 import FailedRow, { FailedJob } from './failedRow';
@@ -59,6 +60,17 @@ const FailedContent: React.FC = () => {
     setJobs({ total_failed: failedJobs.total_failed - 1, jobs: filteredJobs });
   }
 
+  const handleRetry = () => {
+    fetch('retry_all', {
+      method: 'POST'
+    }).then((response) => {
+      if (response.ok) {
+        setFirstJob(0);
+        triggerReset(!wasReset);
+      }
+    })
+  }
+
   const atMaxJob = () => firstJob + stepBy >= failedJobs.total_failed || failedJobs.total_failed === 0;
   const atMinJob = () => firstJob === 0;
 
@@ -87,6 +99,7 @@ const FailedContent: React.FC = () => {
       <Typography variant="h6">
         {failedJobs.total_failed} jobs failed
         <Button className={classes.spaceLeft} color="secondary" onClick={handleQueueClear}>Clear Failed <DeleteIcon /></Button>
+        <Button className={classes.spaceLeft} onClick={handleRetry}>Retry All <RefreshIcon /> </Button>
       </Typography>
 
       <Grid className={classes.gridRoot} container spacing={2}>
