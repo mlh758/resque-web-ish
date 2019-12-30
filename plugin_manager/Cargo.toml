@@ -1,0 +1,10 @@
+[package]
+name = "plugin_manager"
+version = "0.1.0"
+authors = ["mh039333 <mike.harris@cerner.com>"]
+edition = "2018"
+description = "Provides plugins to main resque web application. Use the Plugin trait from this crate to make your own."
+keywords = ["resque"]
+
+[dependencies]
+libloading = "^0.5"

@@ -1,11 +1,8 @@
-#[macro_use]
-extern crate actix_web;
-extern crate redis;
-
 use actix_files as fs;
 use actix_web::http::StatusCode;
-use actix_web::{error, web, App, HttpRequest, HttpResponse, HttpServer};
+use actix_web::{delete, error, get, post, web, App, HttpRequest, HttpResponse, HttpServer};
 mod resque;
+use plugin_manager::Action;
 use serde_derive::{Deserialize, Serialize};
 use std::path::Path;
 
@@ -47,9 +44,14 @@ struct DeleteFailedParam {
     id: String,
 }
 
+struct AppState {
+    client: redis::Client,
+    plugins: plugin_manager::PluginManager,
+}
+
 #[get("/stats")]
-fn resque_stats(client: web::Data<redis::Client>) -> actix_web::Result<HttpResponse> {
-    let mut con = get_redis_connection(&client)?;
+fn resque_stats(state: web::Data<AppState>) -> actix_web::Result<HttpResponse> {
+    let mut con = get_redis_connection(&state.client)?;
     let response = ResqueStats {
         available_queues: resque::get_queues(&mut con)
             .map_err(resque_error_map)?
@@ -65,9 +67,9 @@ fn resque_stats(client: web::Data<redis::Client>) -> actix_web::Result<HttpRespo
 fn queue_details(
     query: web::Query<JobParam>,
     path: web::Path<(String,)>,
-    client: web::Data<redis::Client>,
+    state: web::Data<AppState>,
 ) -> actix_web::Result<HttpResponse> {
-    let mut con = get_redis_connection(&client)?;
+    let mut con = get_redis_connection(&state.client)?;
     let start_at = query.from_job.unwrap_or(0);
     let results = resque::queue_details(&mut con, &path.0, start_at, start_at + 9)
         .map_err(resque_error_map)?;
@@ -77,9 +79,9 @@ fn queue_details(
 #[get("/failed")]
 fn failed_jobs(
     query: web::Query<JobParam>,
-    client: web::Data<redis::Client>,
+    state: web::Data<AppState>,
 ) -> actix_web::Result<HttpResponse> {
-    let mut con = get_redis_connection(&client)?;
+    let mut con = get_redis_connection(&state.client)?;
     let start_at = query.from_job.unwrap_or(0);
     let response = FailedJobs {
         jobs: resque::get_failed(&mut con, start_at, start_at + 9)
@@ -98,8 +100,8 @@ fn failed_jobs(
 }
 
 #[get("/active_workers")]
-fn active_workers(client: web::Data<redis::Client>) -> actix_web::Result<HttpResponse> {
-    let mut con = get_redis_connection(&client)?;
+fn active_workers(state: web::Data<AppState>) -> actix_web::Result<HttpResponse> {
+    let mut con = get_redis_connection(&state.client)?;
     let workers = ResqueWorkers {
         data: resque::active_workers(&mut con).map_err(resque_error_map)?,
     };
@@ -107,8 +109,8 @@ fn active_workers(client: web::Data<redis::Client>) -> actix_web::Result<HttpRes
 }
 
 #[delete("/failed")]
-fn delete_failed_jobs(client: web::Data<redis::Client>) -> actix_web::Result<HttpResponse> {
-    let mut con = get_redis_connection(&client)?;
+fn delete_failed_jobs(state: web::Data<AppState>) -> actix_web::Result<HttpResponse> {
+    let mut con = get_redis_connection(&state.client)?;
     let deleted = resque::clear_queue(&mut con, "failed").map_err(resque_error_map)?;
     Ok(HttpResponse::Ok().body(deleted.to_string()))
 }
@@ -116,26 +118,27 @@ fn delete_failed_jobs(client: web::Data<redis::Client>) -> actix_web::Result<Htt
 #[post("/retry_job")]
 fn retry_failed_job(
     job: web::Json<DeleteFailedParam>,
-    client: web::Data<redis::Client>,
+    state: web::Data<AppState>,
 ) -> actix_web::Result<HttpResponse> {
-    let mut con = get_redis_connection(&client)?;
+    let mut con = get_redis_connection(&state.client)?;
     resque::retry_failed_job(&mut con, &job.id).map_err(resque_error_map)?;
     Ok(HttpResponse::Ok().body("job retried"))
 }
 
 #[post("/retry_all")]
-fn retry_all(client: web::Data<redis::Client>) -> actix_web::Result<HttpResponse> {
-    let mut con = get_redis_connection(&client)?;
+fn retry_all(state: web::Data<AppState>) -> actix_web::Result<HttpResponse> {
+    let mut con = get_redis_connection(&state.client)?;
     resque::retry_all_jobs(&mut con).map_err(resque_error_map)?;
+    state.plugins.post_action(Action::RetryAll);
     Ok(HttpResponse::Ok().body("all jobs retried"))
 }
 
 #[delete("/failed_job")]
 fn delete_failed_job(
     job: web::Json<DeleteFailedParam>,
-    client: web::Data<redis::Client>,
+    state: web::Data<AppState>,
 ) -> actix_web::Result<HttpResponse> {
-    let mut con = get_redis_connection(&client)?;
+    let mut con = get_redis_connection(&state.client)?;
     resque::delete_failed_job(&mut con, &job.id).map_err(resque_error_map)?;
     Ok(HttpResponse::Ok().body("job removed"))
 }
@@ -143,11 +146,14 @@ fn delete_failed_job(
 #[delete("/queue/{name}")]
 fn delete_queue_contents(
     path: web::Path<(String,)>,
-    client: web::Data<redis::Client>,
+    state: web::Data<AppState>,
 ) -> actix_web::Result<HttpResponse> {
-    let mut con = get_redis_connection(&client)?;
+    let mut con = get_redis_connection(&state.client)?;
     let queueKey = format!("queue:{}", path.0);
     let deleted = resque::clear_queue(&mut con, &queueKey).map_err(resque_error_map)?;
+    state
+        .plugins
+        .post_action(Action::DeleteQueue(path.0.clone()));
     Ok(HttpResponse::Ok().body(deleted.to_string()))
 }
 
@@ -180,7 +186,7 @@ fn get_detailed_connection() -> redis::RedisResult<redis::Client> {
     let port: u16 = std::env::var("REDIS_PORT")
         .unwrap_or("".to_string())
         .parse()
-        .unwrap_or(0);
+        .unwrap_or(6379);
     let passwd = get_redis_passwd();
     let db: i64 = std::env::var("REDIS_DATABASE")
         .unwrap_or("".to_string())
@@ -202,12 +208,24 @@ fn create_redis_client() -> redis::RedisResult<redis::Client> {
     }
 }
 
+fn make_plugin_manager() -> Result<plugin_manager::PluginManager, std::io::Error> {
+    let mut plugin_manager = plugin_manager::PluginManager::new();
+    if let Ok(val) = std::env::var("RESQUE_PLUGIN_DIR") {
+        plugin_manager.load_directory(val.as_str())?;
+    }
+    Ok(plugin_manager)
+}
+
 fn main() {
-    std::env::set_var("RUST_LOG", "actix_web=debug");
+    std::env::set_var("RUST_LOG", "info");
     env_logger::init();
     let redis_client = create_redis_client().unwrap();
+    let plugin_manager = make_plugin_manager().expect("error loading plugins");
     let sub_uri = std::env::var("SUB_URI").unwrap_or("".to_string());
-    let data = web::Data::new(redis_client);
+    let data = web::Data::new(AppState {
+        client: redis_client,
+        plugins: plugin_manager,
+    });
     let result = HttpServer::new(move || {
         App::new()
             .wrap(actix_web::middleware::Logger::default())

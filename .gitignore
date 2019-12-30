@@ -2,3 +2,4 @@
 **/*.rs.bk
 /public
 .envrc
+plugin_manager/target
