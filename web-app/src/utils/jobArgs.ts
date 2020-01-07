@@ -5,7 +5,7 @@ interface JobArg {
   arguments: ArgList,
 }
 
-type ArgList = Array<string | Number | Array<string | number>>;
+type ArgList = Array<string | Number | null | ArgList>;
 
 export interface QueueJob {
   args: Array<JobArg>
