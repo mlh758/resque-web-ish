@@ -157,6 +157,16 @@ fn delete_queue_contents(
   Ok(HttpResponse::Ok().body(deleted.to_string()))
 }
 
+#[delete("/worker/{id}")]
+fn delete_worker(
+  path: web::Path<(String,)>,
+  state: web::Data<AppState>,
+) -> actix_web::Result<HttpResponse> {
+  let mut con = get_redis_connection(&state.client)?;
+  resque::remove_worker(&mut con, &path.0).map_err(resque_error_map)?;
+  Ok(HttpResponse::Ok().body("worker removed"))
+}
+
 pub fn static_assets(req: HttpRequest) -> actix_web::Result<fs::NamedFile> {
   let path: std::path::PathBuf = req
     .match_info()

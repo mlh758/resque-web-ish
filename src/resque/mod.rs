@@ -1,12 +1,14 @@
 use redis::{Commands, ErrorKind};
 use serde_derive::{Deserialize, Serialize};
 use std::collections::HashSet;
+use std::collections::HashMap;
 mod queue;
 
 #[derive(Serialize)]
 pub struct Worker {
   id: String,
-  payload: String,
+  payload: Option<String>,
+  heartbeat: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -46,13 +48,12 @@ pub fn current_failures(con: &mut redis::Connection) -> redis::RedisResult<u64> 
 
 pub fn active_workers(con: &mut redis::Connection) -> redis::RedisResult<Vec<Worker>> {
   let workers: Vec<String> = con.smembers("resque:workers")?;
+  let heartbeats: HashMap<String, String> = con.hgetall("resque:workers:heartbeat")?;
   let results: Vec<Worker> = workers
     .into_iter()
     .map(|worker| Worker {
-      payload: match con.get(format!("resque:worker:{}", &worker)) {
-        Ok(val) => val,
-        Err(_) => String::from(""),
-      },
+      payload: con.get(format!("resque:worker:{}", &worker)).unwrap_or(None),
+      heartbeat: heartbeats.get(&worker).map(|x| x.to_string()),
       id: worker,
     })
     .collect();
@@ -125,4 +126,15 @@ fn remove_job(con: &mut redis::Connection, key: &str, job: &str) -> redis::Redis
     ErrorKind::IoError,
     "job not found",
   )))
+}
+
+pub fn remove_worker(con: &mut redis::Connection, id: &str) -> redis::RedisResult<()> {
+  redis::pipe()
+    .cmd("DEL").arg(format!("resque:stat:processed:{}", id)).ignore()
+    .cmd("DEL").arg(format!("resque:stat:failed:{}", id)).ignore()
+    .cmd("SREM").arg("resque:workers").arg(id).ignore()
+    .cmd("HDEL").arg("resque:workers:heartbeat").arg(id).ignore()
+    .cmd("DEL").arg(format!("resque:worker:{}:started", id)).ignore()
+    .query(con)?;
+  Ok(())
 }

@@ -4,6 +4,7 @@ WORKDIR /home/builder
 RUN USER=root cargo new resque-web
 WORKDIR /home/builder/resque-web
 # Copy and build dependencies separately from app to improve subsequent build times
+COPY plugin_manager ./plugin_manager
 COPY Cargo.toml Cargo.lock ./
 RUN cargo build --release
 COPY src ./src

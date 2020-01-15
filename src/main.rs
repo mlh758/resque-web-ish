@@ -70,6 +70,7 @@ fn main() {
                     .service(handlers::delete_failed_job)
                     .service(handlers::retry_failed_job)
                     .service(handlers::retry_all)
+                    .service(handlers::delete_worker)
                     .route("{filename:.*}", web::get().to(handlers::static_assets)),
             )
     })
