@@ -84,21 +84,21 @@ pub fn clear_queue(con: &mut redis::Connection, queue: &str) -> redis::RedisResu
   con.del(format!("resque:{}", queue))
 }
 
-pub fn delete_failed_job(con: &mut redis::Connection, job: &str) -> redis::RedisResult<isize> {
+pub fn delete_failed_job(con: &mut redis::Connection, job: &str) -> redis::RedisResult<()> {
   let key = "resque:failed";
   remove_job(con, key, job)?;
-  Ok(1)
+  Ok(())
 }
 
-pub fn retry_failed_job(con: &mut redis::Connection, job: &str) -> redis::RedisResult<isize> {
+pub fn retry_failed_job(con: &mut redis::Connection, job: &str) -> redis::RedisResult<()> {
   let key = "resque:failed";
   let job = remove_job(con, key, job)?;
   let job_payload: FailedJob = serde_json::from_str(job.as_str()).map_err(json_failed)?;
   con.rpush("resque:queue:default", job_payload.payload.to_string())?;
-  Ok(1)
+  Ok(())
 }
 
-pub fn retry_all_jobs(con: &mut redis::Connection) -> redis::RedisResult<isize> {
+pub fn retry_all_jobs(con: &mut redis::Connection) -> redis::RedisResult<()> {
   let key = "resque:failed";
   let mut iter = queue::Iter::load(con, key, 100)?;
   iter.each(|con, job| {
@@ -107,7 +107,7 @@ pub fn retry_all_jobs(con: &mut redis::Connection) -> redis::RedisResult<isize> 
     Ok(true)
   })?;
   clear_queue(con, "failed")?;
-  Ok(1)
+  Ok(())
 }
 
 fn json_failed(_err: serde_json::Error) -> redis::RedisError {
