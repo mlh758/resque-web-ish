@@ -174,12 +174,11 @@ pub fn static_assets(req: HttpRequest) -> actix_web::Result<fs::NamedFile> {
     .parse()
     .map_err(resque_error_map)?;
   let root = Path::new("./public");
-  let file = fs::NamedFile::open(root.join(path))?;
+  let file = fs::NamedFile::open(root.join(path)).or_else(|_e| fs::NamedFile::open("./public/index.html"))?;
   Ok(file.use_last_modified(true))
 }
 
-#[get("/")]
-fn home() -> actix_web::Result<fs::NamedFile> {
+pub fn home(_req: HttpRequest) -> actix_web::Result<fs::NamedFile> {
   let file = fs::NamedFile::open("./public/index.html")?;
   Ok(file.use_last_modified(true))
 }

@@ -36,6 +36,16 @@ next to the public folder and run it.
 
 You can also use the provided Dockerfile to get a minimal docker container with this already done for you.
 
+### Deploying Under a Nested Path
+
+You can build the docker image to use a nested URL by passing a build arg:
+
+`docker build --build-arg RELATIVE_URL=/resque-web .`
+
+This will cause the application to work as `https://example.com/resque-web` instead of expecting to be deployed
+on the root path. If you are not using docker, you can use a build process identical to the one in the docker file
+to build the assets with a PUBLIC_URL and set the environment variable for the back end.
+
 ## Plugins
 
 The `plugin_manager` crate defined in this repository provides functionality to define and load plugins

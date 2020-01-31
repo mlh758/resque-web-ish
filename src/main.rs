@@ -60,8 +60,9 @@ fn main() {
             .register_data(data.clone())
             .service(
                 web::scope(&sub_uri)
-                    .service(handlers::home)
-                    .service(handlers::resque_stats)
+                    .route("/", web::get().to(handlers::home))
+                    .route("", web::get().to(handlers::home))
+                    .service(web::scope("/api").service(handlers::resque_stats)
                     .service(handlers::failed_jobs)
                     .service(handlers::active_workers)
                     .service(handlers::queue_details)
@@ -70,7 +71,7 @@ fn main() {
                     .service(handlers::delete_failed_job)
                     .service(handlers::retry_failed_job)
                     .service(handlers::retry_all)
-                    .service(handlers::delete_worker)
+                    .service(handlers::delete_worker))
                     .route("{filename:.*}", web::get().to(handlers::static_assets)),
             )
     })

@@ -11,15 +11,20 @@ COPY src ./src
 RUN touch -m src/main.rs
 RUN cargo build --release
 
+
 FROM node:10.16-stretch as node-build
+ARG RELATIVE_URL=""
 WORKDIR /home/builder/web-app
 RUN npm install -g yarn
 COPY web-app .
 RUN yarn install
+ENV PUBLIC_URL ${RELATIVE_URL}
 RUN yarn build
 
 FROM debian:stretch-slim
+ARG RELATIVE_URL=""
 WORKDIR /home/deploy/app
+ENV SUB_URI ${RELATIVE_URL}
 COPY --from=rust-build /home/builder/resque-web/target/release/resque-web /home/deploy/app/service
 COPY --from=node-build /home/builder/web-app/build /home/deploy/app/public
 EXPOSE 8080
