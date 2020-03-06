@@ -16,7 +16,7 @@ import BASE_PATH from "../utils/basePath";
 
 interface Worker {
   id: string;
-  payload?: Payload;
+  payload?: string;
   heartbeat?: string;
 }
 
@@ -60,10 +60,11 @@ function workerText(item: Worker) {
   if (!item.payload) {
     return <ListItemText primary={item.id} secondary="waiting..." />;
   }
+  const argList: Payload = JSON.parse(item.payload);
   return (
     <ListItemText
-      primary={`${item.id} - ${item.payload.payload.args[0].job_class}`}
-      secondary={payloadString(item.payload)}
+      primary={`${item.id} - ${argList.payload.args[0].job_class}`}
+      secondary={payloadString(argList)}
     />
   );
 }

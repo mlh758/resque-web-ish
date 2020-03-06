@@ -1,8 +1,8 @@
 use redis::{Commands, RedisResult};
 
 /// An iterator for a queue, pulls items out of the queue in batches
-pub struct Iter<'a> {
-  con: &'a mut redis::Connection,
+pub struct Iter<'a, T: Commands> {
+  con: &'a mut T,
   batch: Vec<String>,
   queue: &'a str,
   total: isize,
@@ -10,12 +10,12 @@ pub struct Iter<'a> {
   start: isize,
 }
 
-impl<'a> Iter<'a> {
+impl<'a, T: Commands> Iter<'a, T> {
   pub fn load(
-    con: &'a mut redis::Connection,
+    con: &'a mut T,
     queue: &'a str,
     batch_size: isize,
-  ) -> RedisResult<Iter<'a>> {
+  ) -> RedisResult<Iter<'a, T>> {
     let iter = Iter {
       total: con.llen(queue)?,
       con: con,
@@ -31,7 +31,7 @@ impl<'a> Iter<'a> {
   /// The Ok value can be ignored
   pub fn each<F>(&mut self, f: F) -> RedisResult<bool>
   where
-    F: Fn(&mut redis::Connection, String) -> RedisResult<bool>,
+    F: Fn(&mut T, String) -> RedisResult<bool>,
   {
     while let Some(val) = self.next() {
       f(self.con, val)?;
@@ -40,7 +40,7 @@ impl<'a> Iter<'a> {
   }
 }
 
-impl<'a> Iterator for Iter<'a> {
+impl<'a, T: Commands> Iterator for Iter<'a, T> {
   type Item = String;
   fn next(&mut self) -> Option<Self::Item> {
     loop {
@@ -54,6 +54,10 @@ impl<'a> Iterator for Iter<'a> {
         Ok(v) => v,
         Err(_) => return None,
       };
+      // Something could have popped items on us between requests, avoid infinite loop
+      if batch.len() == 0 {
+        return None;
+      }
       batch.reverse();
       self.start = self.start + self.batch_size;
       self.batch = batch;
