@@ -44,7 +44,8 @@ fn make_plugin_manager() -> Result<plugin_manager::PluginManager, std::io::Error
     Ok(plugin_manager)
 }
 
-fn main() {
+#[actix_rt::main]
+async fn main() -> std::io::Result<()> {
     std::env::set_var("RUST_LOG", "info");
     env_logger::init();
     let redis_client = create_redis_client().unwrap();
@@ -57,7 +58,7 @@ fn main() {
     let result = HttpServer::new(move || {
         App::new()
             .wrap(actix_web::middleware::Logger::default())
-            .register_data(data.clone())
+            .app_data(data.clone())
             .service(
                 web::scope(&sub_uri)
                     .route("/", web::get().to(handlers::home))
@@ -77,9 +78,10 @@ fn main() {
     })
     .bind("0.0.0.0:8080")
     .expect("unable to bind server")
-    .run();
-    match result {
-        Ok(_) => println!("Server listening"),
-        Err(e) => println!("Unable to start: {}", e),
+    .run()
+    .await;
+    if let Err(e) = result {
+        println!("Unable to start: {}", e);
     }
+    Ok(())
 }

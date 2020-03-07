@@ -24,4 +24,12 @@ impl<'a> ConnectionLike for RedisStore<'a> {
         self.received.extend_from_slice(cmd);
         Ok(self.to_send.pop().unwrap())
     }
+
+    fn check_connection(&mut self) -> bool {
+        true
+    }
+
+    fn is_open(&self) -> bool {
+        true
+    }
 }

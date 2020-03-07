@@ -50,7 +50,7 @@ fn resque_error_map<T>(err: T) -> error::InternalError<T> {
 }
 
 #[get("/stats")]
-fn resque_stats(state: web::Data<AppState>) -> actix_web::Result<HttpResponse> {
+async fn resque_stats(state: web::Data<AppState>) -> actix_web::Result<HttpResponse> {
   let mut con = get_redis_connection(&state.client)?;
   let response = ResqueStats {
     available_queues: resque::get_queues(&mut con)
@@ -64,7 +64,7 @@ fn resque_stats(state: web::Data<AppState>) -> actix_web::Result<HttpResponse> {
 }
 
 #[get("/queue/{name}")]
-fn queue_details(
+async fn queue_details(
   query: web::Query<JobParam>,
   path: web::Path<(String,)>,
   state: web::Data<AppState>,
@@ -77,7 +77,7 @@ fn queue_details(
 }
 
 #[get("/failed")]
-fn failed_jobs(
+async fn failed_jobs(
   query: web::Query<JobParam>,
   state: web::Data<AppState>,
 ) -> actix_web::Result<HttpResponse> {
@@ -100,7 +100,7 @@ fn failed_jobs(
 }
 
 #[get("/active_workers")]
-fn active_workers(state: web::Data<AppState>) -> actix_web::Result<HttpResponse> {
+async fn active_workers(state: web::Data<AppState>) -> actix_web::Result<HttpResponse> {
   let mut con = get_redis_connection(&state.client)?;
   let workers = ResqueWorkers {
     data: resque::active_workers(&mut con).map_err(resque_error_map)?,
@@ -109,14 +109,14 @@ fn active_workers(state: web::Data<AppState>) -> actix_web::Result<HttpResponse>
 }
 
 #[delete("/failed")]
-fn delete_failed_jobs(state: web::Data<AppState>) -> actix_web::Result<HttpResponse> {
+async fn delete_failed_jobs(state: web::Data<AppState>) -> actix_web::Result<HttpResponse> {
   let mut con = get_redis_connection(&state.client)?;
   let deleted = resque::clear_queue(&mut con, "failed").map_err(resque_error_map)?;
   Ok(HttpResponse::Ok().body(deleted.to_string()))
 }
 
 #[post("/retry_job")]
-fn retry_failed_job(
+async fn retry_failed_job(
   job: web::Json<DeleteFailedParam>,
   state: web::Data<AppState>,
 ) -> actix_web::Result<HttpResponse> {
@@ -126,7 +126,7 @@ fn retry_failed_job(
 }
 
 #[post("/retry_all")]
-fn retry_all(state: web::Data<AppState>) -> actix_web::Result<HttpResponse> {
+async fn retry_all(state: web::Data<AppState>) -> actix_web::Result<HttpResponse> {
   let mut con = get_redis_connection(&state.client)?;
   resque::retry_all_jobs(&mut con).map_err(resque_error_map)?;
   state.plugins.post_action(Action::RetryAll);
@@ -134,7 +134,7 @@ fn retry_all(state: web::Data<AppState>) -> actix_web::Result<HttpResponse> {
 }
 
 #[delete("/failed_job")]
-fn delete_failed_job(
+async fn delete_failed_job(
   job: web::Json<DeleteFailedParam>,
   state: web::Data<AppState>,
 ) -> actix_web::Result<HttpResponse> {
@@ -144,13 +144,13 @@ fn delete_failed_job(
 }
 
 #[delete("/queue/{name}")]
-fn delete_queue_contents(
+async fn delete_queue_contents(
   path: web::Path<(String,)>,
   state: web::Data<AppState>,
 ) -> actix_web::Result<HttpResponse> {
   let mut con = get_redis_connection(&state.client)?;
-  let queueKey = format!("queue:{}", path.0);
-  let deleted = resque::clear_queue(&mut con, &queueKey).map_err(resque_error_map)?;
+  let queue_key = format!("queue:{}", path.0);
+  let deleted = resque::clear_queue(&mut con, &queue_key).map_err(resque_error_map)?;
   state
     .plugins
     .post_action(Action::DeleteQueue(path.0.clone()));
@@ -158,7 +158,7 @@ fn delete_queue_contents(
 }
 
 #[delete("/worker/{id}")]
-fn delete_worker(
+async fn delete_worker(
   path: web::Path<(String,)>,
   state: web::Data<AppState>,
 ) -> actix_web::Result<HttpResponse> {
@@ -167,7 +167,7 @@ fn delete_worker(
   Ok(HttpResponse::Ok().body("worker removed"))
 }
 
-pub fn static_assets(req: HttpRequest) -> actix_web::Result<fs::NamedFile> {
+pub async fn static_assets(req: HttpRequest) -> actix_web::Result<fs::NamedFile> {
   let path: std::path::PathBuf = req
     .match_info()
     .query("filename")
@@ -178,7 +178,7 @@ pub fn static_assets(req: HttpRequest) -> actix_web::Result<fs::NamedFile> {
   Ok(file.use_last_modified(true))
 }
 
-pub fn home(_req: HttpRequest) -> actix_web::Result<fs::NamedFile> {
+pub async fn home(_req: HttpRequest) -> actix_web::Result<fs::NamedFile> {
   let file = fs::NamedFile::open("./public/index.html")?;
   Ok(file.use_last_modified(true))
 }
