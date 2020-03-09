@@ -23,16 +23,27 @@ struct FailedJob {
   payload: serde_json::Value,
 }
 
-pub fn get_queues(con: &mut impl Commands) -> redis::RedisResult<HashSet<String>> {
-  con.smembers("resque:queues")
+#[derive(Serialize)]
+pub struct ResqueStats {
+  success_count: u64,
+  failure_count: u64,
+  available_queues: Vec<String>,
 }
 
-pub fn failure_count(con: &mut impl Commands) -> u64 {
-  con.get("resque:stat:failed").unwrap_or(0)
-}
-
-pub fn processed_count(con: &mut impl Commands) -> u64 {
-  con.get("resque:stat:processed").unwrap_or(0)
+pub fn queue_stats(con: &mut impl Commands) -> redis::RedisResult<ResqueStats> {
+  let (queues, fail_cnt, pass_cnt): (HashSet<String>, Option<u64>, Option<u64>) = redis::pipe()
+    .cmd("SMEMBERS")
+    .arg("resque:queues")
+    .cmd("GET")
+    .arg("resque:stat:failed")
+    .cmd("GET")
+    .arg("resque:stat:processed")
+    .query(con)?;
+  Ok(ResqueStats {
+    success_count: pass_cnt.unwrap_or(0),
+    failure_count: fail_cnt.unwrap_or(0),
+    available_queues: queues.into_iter().collect(),
+  })
 }
 
 pub fn get_failed(
@@ -186,23 +197,17 @@ mod tests {
   }
 
   #[test]
-  fn test_processed_count() {
-    let mut store = RedisStore {
-      received: &mut Vec::new(),
-      to_send: &mut vec![Value::Int(100), Value::Nil],
-    };
-    assert_eq!(processed_count(&mut store), 0);
-    assert_eq!(processed_count(&mut store), 100);
-  }
-
-  #[test]
   fn delete_failed_job_succeeds() {
     let mut store = RedisStore {
       received: &mut Vec::new(),
       to_send: &mut vec![
         Value::Int(1),
-        Value::Bulk(vec![Value::Data(Vec::from("id1")), Value::Data(Vec::from("id2")), Value::Data(Vec::from("id3"))]),
-        Value::Int(3)
+        Value::Bulk(vec![
+          Value::Data(Vec::from("id1")),
+          Value::Data(Vec::from("id2")),
+          Value::Data(Vec::from("id3")),
+        ]),
+        Value::Int(3),
       ],
     };
     let rslt = delete_failed_job(&mut store, "id2");
@@ -216,11 +221,52 @@ mod tests {
       to_send: &mut vec![
         Value::Int(1),
         Value::Bulk(vec![Value::Data(Vec::from("id1"))]),
-        Value::Int(3)
+        Value::Int(3),
       ],
     };
     if let Ok(()) = delete_failed_job(&mut store, "id2") {
       panic!("should not have found a value")
     }
+  }
+  #[test]
+  fn queue_stats_populated() {
+    let mut store = RedisStore {
+      received: &mut Vec::new(),
+      to_send: &mut vec![
+        Value::Bulk(vec![Value::Data(Vec::from("default"))]),
+        Value::Int(123),
+        Value::Int(456),
+      ],
+    };
+    let rslt = queue_stats(&mut store).unwrap();
+    let expected = ResqueStats {
+      available_queues: vec!["default".to_string()],
+      failure_count: 123,
+      success_count: 456,
+    };
+    assert_eq!(rslt.available_queues, expected.available_queues);
+    assert_eq!(rslt.failure_count, expected.failure_count);
+    assert_eq!(rslt.success_count, expected.success_count);
+  }
+
+  #[test]
+  fn queue_stats_no_counts() {
+    let mut store = RedisStore {
+      received: &mut Vec::new(),
+      to_send: &mut vec![
+        Value::Bulk(vec![Value::Data(Vec::from("default"))]),
+        Value::Nil,
+        Value::Nil,
+      ],
+    };
+    let rslt = queue_stats(&mut store).unwrap();
+    let expected = ResqueStats {
+      available_queues: vec!["default".to_string()],
+      failure_count: 0,
+      success_count: 0,
+    };
+    assert_eq!(rslt.available_queues, expected.available_queues);
+    assert_eq!(rslt.failure_count, expected.failure_count);
+    assert_eq!(rslt.success_count, expected.success_count);
   }
 }

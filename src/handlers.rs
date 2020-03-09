@@ -17,13 +17,6 @@ pub struct AppState {
 }
 
 #[derive(Serialize)]
-struct ResqueStats {
-  success_count: u64,
-  failure_count: u64,
-  available_queues: Vec<String>,
-}
-
-#[derive(Serialize)]
 struct FailedJobs {
   jobs: serde_json::Value,
   total_failed: u64,
@@ -57,14 +50,7 @@ fn resque_error_map<T>(err: T) -> error::InternalError<T> {
 #[get("/stats")]
 async fn resque_stats(state: web::Data<AppState>) -> actix_web::Result<HttpResponse> {
   let mut con = get_redis_connection(&state.pool)?;
-  let response = ResqueStats {
-    available_queues: resque::get_queues(con.deref_mut())
-      .map_err(resque_error_map)?
-      .into_iter()
-      .collect(),
-    success_count: resque::processed_count(con.deref_mut()),
-    failure_count: resque::failure_count(con.deref_mut()),
-  };
+  let response = resque::queue_stats(con.deref_mut()).map_err(resque_error_map)?;
   Ok(HttpResponse::Ok().json(response))
 }
 
