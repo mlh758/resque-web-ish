@@ -1,4 +1,5 @@
 use actix_web::{web, App, HttpServer};
+use r2d2_redis::{redis, RedisConnectionManager, r2d2};
 mod handlers;
 mod resque;
 
@@ -9,7 +10,7 @@ fn get_redis_passwd() -> Option<String> {
     }
 }
 
-fn get_detailed_connection() -> redis::RedisResult<redis::Client> {
+fn get_detailed_connection() -> redis::RedisResult<RedisConnectionManager> {
     let addr = std::env::var("REDIS_HOSTNAME").unwrap_or("".to_string());
     let port: u16 = std::env::var("REDIS_PORT")
         .unwrap_or("".to_string())
@@ -26,12 +27,12 @@ fn get_detailed_connection() -> redis::RedisResult<redis::Client> {
         addr: Box::new(con_addr),
         passwd: passwd,
     };
-    redis::Client::open(conn_info)
+    RedisConnectionManager::new(conn_info)
 }
 
-fn create_redis_client() -> redis::RedisResult<redis::Client> {
+fn create_redis_client() -> redis::RedisResult<RedisConnectionManager> {
     match std::env::var("REDIS_CONNECTION_STRING") {
-        Ok(val) => redis::Client::open(val.as_ref()),
+        Ok(val) => RedisConnectionManager::new(val.as_ref()),
         Err(_) => get_detailed_connection(),
     }
 }
@@ -48,11 +49,14 @@ fn make_plugin_manager() -> Result<plugin_manager::PluginManager, std::io::Error
 async fn main() -> std::io::Result<()> {
     std::env::set_var("RUST_LOG", "info");
     env_logger::init();
-    let redis_client = create_redis_client().unwrap();
+    let manager = create_redis_client().unwrap();
+    let pool = r2d2::Pool::builder()
+        .build(manager)
+        .unwrap();
     let plugin_manager = make_plugin_manager().expect("error loading plugins");
     let sub_uri = std::env::var("SUB_URI").unwrap_or("".to_string());
     let data = web::Data::new(handlers::AppState {
-        client: redis_client,
+        pool: pool,
         plugins: plugin_manager,
     });
     let result = HttpServer::new(move || {

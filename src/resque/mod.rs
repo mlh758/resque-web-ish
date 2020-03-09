@@ -1,3 +1,4 @@
+use r2d2_redis::redis;
 use redis::{Commands, ErrorKind};
 use serde_derive::{Deserialize, Serialize};
 use std::collections::HashMap;

@@ -1,3 +1,4 @@
+use r2d2_redis::redis;
 use redis::{Commands, RedisResult};
 
 /// An iterator for a queue, pulls items out of the queue in batches
