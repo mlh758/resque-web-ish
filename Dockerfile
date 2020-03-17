@@ -1,4 +1,4 @@
-FROM rust:1.35 as rust-build
+FROM rust:1.41 as rust-build
 
 WORKDIR /home/builder
 RUN USER=root cargo new resque-web
