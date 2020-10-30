@@ -6,7 +6,7 @@ of the application running Resque.
 
 For all the commands below you will either need to have exported a `REDIS_CONNECTION_STRING` environment variable
 or pass that along to the `cargo run` commands when you start the app. This is the redis connection string the app
-will use when connecting.
+will use when connecting. For details on the connection parameters, see the [Redis crate docs](https://docs.rs/redis/0.17.0/redis/#connection-parameters).
 
 You can also provide configuration through the following variables which will be checked if the above variable is
 not provided:

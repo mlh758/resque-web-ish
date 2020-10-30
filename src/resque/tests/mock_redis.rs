@@ -1,4 +1,3 @@
-use r2d2_redis::redis;
 use redis::{ConnectionLike, RedisResult, Value};
 
 pub struct RedisStore<'a> {
