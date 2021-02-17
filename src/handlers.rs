@@ -5,7 +5,6 @@ use actix_web::{delete, error, get, post, web, HttpRequest, HttpResponse};
 use plugin_manager::Action;
 use redis::aio::ConnectionManager;
 use serde_derive::{Deserialize, Serialize};
-use std::ops::DerefMut;
 use std::path::Path;
 
 pub struct AppState {
@@ -52,9 +51,9 @@ async fn queue_details(
     path: web::Path<(String,)>,
     state: web::Data<AppState>,
 ) -> actix_web::Result<HttpResponse> {
-    let mut con = get_redis_connection(&state.pool)?;
     let start_at = query.from_job.unwrap_or(0);
-    let results = resque::queue_details(con.deref_mut(), &path.0, start_at, start_at + 9)
+    let results = resque::queue_details(state.redis.clone(), &path.0, start_at, start_at + 9)
+        .await
         .map_err(resque_error_map)?;
     Ok(HttpResponse::Ok().json(results))
 }
@@ -64,10 +63,10 @@ async fn failed_jobs(
     query: web::Query<JobParam>,
     state: web::Data<AppState>,
 ) -> actix_web::Result<HttpResponse> {
-    let mut con = get_redis_connection(&state.pool)?;
     let start_at = query.from_job.unwrap_or(0);
     let response = FailedJobs {
-        jobs: resque::get_failed(con.deref_mut(), start_at, start_at + 9)
+        jobs: resque::get_failed(state.redis.clone(), start_at, start_at + 9)
+            .await
             .map_err(resque_error_map)?
             .into_iter()
             .map(
@@ -77,24 +76,28 @@ async fn failed_jobs(
                 },
             )
             .collect(),
-        total_failed: resque::current_failures(con.deref_mut()).map_err(resque_error_map)?,
+        total_failed: resque::current_failures(state.redis.clone())
+            .await
+            .map_err(resque_error_map)?,
     };
     Ok(HttpResponse::Ok().json(response))
 }
 
 #[get("/active_workers")]
 async fn active_workers(state: web::Data<AppState>) -> actix_web::Result<HttpResponse> {
-    let mut con = get_redis_connection(&state.pool)?;
     let workers = ResqueWorkers {
-        data: resque::active_workers(con.deref_mut()).map_err(resque_error_map)?,
+        data: resque::active_workers(state.redis.clone())
+            .await
+            .map_err(resque_error_map)?,
     };
     Ok(HttpResponse::Ok().json(workers))
 }
 
 #[delete("/failed")]
 async fn delete_failed_jobs(state: web::Data<AppState>) -> actix_web::Result<HttpResponse> {
-    let mut con = get_redis_connection(&state.pool)?;
-    let deleted = resque::clear_queue(con.deref_mut(), "failed").map_err(resque_error_map)?;
+    let deleted = resque::clear_queue(state.redis.clone(), "failed")
+        .await
+        .map_err(resque_error_map)?;
     Ok(HttpResponse::Ok().body(deleted.to_string()))
 }
 
@@ -103,15 +106,17 @@ async fn retry_failed_job(
     job: web::Json<DeleteFailedParam>,
     state: web::Data<AppState>,
 ) -> actix_web::Result<HttpResponse> {
-    let mut con = get_redis_connection(&state.pool)?;
-    resque::retry_failed_job(con.deref_mut(), &job.id).map_err(resque_error_map)?;
+    resque::retry_failed_job(state.redis.clone(), &job.id)
+        .await
+        .map_err(resque_error_map)?;
     Ok(HttpResponse::Ok().body("job retried"))
 }
 
 #[post("/retry_all")]
 async fn retry_all(state: web::Data<AppState>) -> actix_web::Result<HttpResponse> {
-    let mut con = get_redis_connection(&state.pool)?;
-    resque::retry_all_jobs(con.deref_mut()).map_err(resque_error_map)?;
+    resque::retry_all_jobs(state.redis.clone())
+        .await
+        .map_err(resque_error_map)?;
     state.plugins.post_action(Action::RetryAll);
     Ok(HttpResponse::Ok().body("all jobs retried"))
 }
@@ -121,8 +126,9 @@ async fn delete_failed_job(
     job: web::Json<DeleteFailedParam>,
     state: web::Data<AppState>,
 ) -> actix_web::Result<HttpResponse> {
-    let mut con = get_redis_connection(&state.pool)?;
-    resque::delete_failed_job(con.deref_mut(), &job.id).map_err(resque_error_map)?;
+    resque::delete_failed_job(state.redis.clone(), &job.id)
+        .await
+        .map_err(resque_error_map)?;
     Ok(HttpResponse::Ok().body("job removed"))
 }
 
@@ -131,9 +137,10 @@ async fn delete_queue_contents(
     path: web::Path<(String,)>,
     state: web::Data<AppState>,
 ) -> actix_web::Result<HttpResponse> {
-    let mut con = get_redis_connection(&state.pool)?;
     let queue_key = format!("queue:{}", path.0);
-    let deleted = resque::clear_queue(con.deref_mut(), &queue_key).map_err(resque_error_map)?;
+    let deleted = resque::clear_queue(state.redis.clone(), &queue_key)
+        .await
+        .map_err(resque_error_map)?;
     state
         .plugins
         .post_action(Action::DeleteQueue(path.0.clone()));
@@ -145,8 +152,9 @@ async fn delete_worker(
     path: web::Path<(String,)>,
     state: web::Data<AppState>,
 ) -> actix_web::Result<HttpResponse> {
-    let mut con = get_redis_connection(&state.pool)?;
-    resque::remove_worker(con.deref_mut(), &path.0).map_err(resque_error_map)?;
+    resque::remove_worker(state.redis.clone(), &path.0)
+        .await
+        .map_err(resque_error_map)?;
     Ok(HttpResponse::Ok().body("worker removed"))
 }
 

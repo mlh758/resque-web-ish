@@ -148,7 +148,7 @@ async fn remove_job(
     )))
 }
 
-pub async fn remove_worker(con: &mut impl AsyncCommands, id: &str) -> redis::RedisResult<()> {
+pub async fn remove_worker(mut con: impl AsyncCommands, id: &str) -> redis::RedisResult<()> {
     redis::pipe()
         .cmd("DEL")
         .arg(format!("resque:stat:processed:{}", id))
@@ -167,7 +167,7 @@ pub async fn remove_worker(con: &mut impl AsyncCommands, id: &str) -> redis::Red
         .cmd("DEL")
         .arg(format!("resque:worker:{}:started", id))
         .ignore()
-        .query_async(con)
+        .query_async(&mut con)
         .await
 }
 
