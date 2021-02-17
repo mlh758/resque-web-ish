@@ -3,16 +3,13 @@ use actix_files as fs;
 use actix_web::http::StatusCode;
 use actix_web::{delete, error, get, post, web, HttpRequest, HttpResponse};
 use plugin_manager::Action;
-use r2d2::Pool;
-use redis;
+use redis::aio::ConnectionManager;
 use serde_derive::{Deserialize, Serialize};
 use std::ops::DerefMut;
 use std::path::Path;
 
-type RedisPool = Pool<redis::Client>;
-
 pub struct AppState {
-    pub pool: RedisPool,
+    pub redis: ConnectionManager,
     pub plugins: plugin_manager::PluginManager,
 }
 
@@ -37,20 +34,15 @@ struct DeleteFailedParam {
     id: String,
 }
 
-fn get_redis_connection(
-    pool: &RedisPool,
-) -> Result<r2d2::PooledConnection<redis::Client>, error::InternalError<r2d2::Error>> {
-    pool.get().map_err(resque_error_map)
-}
-
 fn resque_error_map<T>(err: T) -> error::InternalError<T> {
     error::InternalError::new(err, StatusCode::INTERNAL_SERVER_ERROR)
 }
 
 #[get("/stats")]
 async fn resque_stats(state: web::Data<AppState>) -> actix_web::Result<HttpResponse> {
-    let mut con = get_redis_connection(&state.pool)?;
-    let response = resque::queue_stats(con.deref_mut()).map_err(resque_error_map)?;
+    let response = resque::queue_stats(state.redis.clone())
+        .await
+        .map_err(resque_error_map)?;
     Ok(HttpResponse::Ok().json(response))
 }
 

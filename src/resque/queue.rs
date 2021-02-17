@@ -1,7 +1,7 @@
-use redis::{Commands, RedisResult};
+use redis::{AsyncCommands, RedisResult};
 
 /// An iterator for a queue, pulls items out of the queue in batches
-pub struct Iter<'a, T: Commands> {
+pub struct Iter<'a, T: AsyncCommands> {
     con: &'a mut T,
     batch: Vec<String>,
     queue: &'a str,
@@ -10,12 +10,16 @@ pub struct Iter<'a, T: Commands> {
     start: isize,
 }
 
-impl<'a, T: Commands> Iter<'a, T> {
-    pub fn load(con: &'a mut T, queue: &'a str, batch_size: isize) -> RedisResult<Iter<'a, T>> {
+impl<'a, T: AsyncCommands> Iter<'a, T> {
+    pub async fn load(
+        con: &'a mut T,
+        queue: &'a str,
+        batch_size: isize,
+    ) -> RedisResult<Iter<'a, T>> {
         let iter = Iter {
-            total: con.llen(queue)?,
-            con: con,
-            queue: queue,
+            total: con.llen(queue).await?,
+            con,
+            queue,
             batch_size: batch_size - 1,
             batch: vec![],
             start: 0,
@@ -36,7 +40,7 @@ impl<'a, T: Commands> Iter<'a, T> {
     }
 }
 
-impl<'a, T: Commands> Iterator for Iter<'a, T> {
+impl<'a, T: AsyncCommands> Iterator for Iter<'a, T> {
     type Item = String;
     fn next(&mut self) -> Option<Self::Item> {
         loop {

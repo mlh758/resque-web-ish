@@ -1,9 +1,7 @@
 use actix_web::{web, App, HttpServer};
-use redis;
 use serde_derive::Deserialize;
 mod handlers;
 mod resque;
-use config;
 
 #[derive(Deserialize)]
 struct AppConfig {
@@ -43,11 +41,17 @@ impl From<&AppConfig> for redis::ConnectionInfo {
     }
 }
 
-fn create_redis_client(config: &AppConfig) -> redis::RedisResult<redis::Client> {
-    match &config.connection_string {
+async fn open_redis(
+    config: &AppConfig,
+) -> Result<redis::aio::ConnectionManager, Box<dyn std::error::Error>> {
+    let client = match &config.connection_string {
         Some(val) => redis::Client::open(val.as_ref()),
         None => redis::Client::open(redis::ConnectionInfo::from(config)),
-    }
+    };
+    client?
+        .get_tokio_connection_manager()
+        .await
+        .map_err(|e| e.into())
 }
 
 fn make_plugin_manager(
@@ -61,16 +65,15 @@ fn make_plugin_manager(
 }
 
 #[actix_rt::main]
-async fn main() -> std::io::Result<()> {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     std::env::set_var("RUST_LOG", "info");
     env_logger::init();
     let app_config = load_config().unwrap();
-    let manager = create_redis_client(&app_config).unwrap();
-    let pool = r2d2::Pool::builder().build(manager).unwrap();
+    let redis = open_redis(&app_config).await?;
     let plugin_manager = make_plugin_manager(&app_config).expect("error loading plugins");
     let sub_uri = std::env::var("SUB_URI").unwrap_or("".to_string());
     let data = web::Data::new(handlers::AppState {
-        pool: pool,
+        redis,
         plugins: plugin_manager,
     });
     let result = HttpServer::new(move || {
