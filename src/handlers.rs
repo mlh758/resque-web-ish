@@ -42,7 +42,7 @@ async fn resque_stats(state: web::Data<AppState>) -> actix_web::Result<HttpRespo
     let response = resque::queue_stats(state.redis.clone())
         .await
         .map_err(resque_error_map)?;
-    Ok(HttpResponse::Ok().json(response))
+    Ok(HttpResponse::Ok().json(&response))
 }
 
 #[get("/queue/{name}")]
@@ -55,7 +55,7 @@ async fn queue_details(
     let results = resque::queue_details(state.redis.clone(), &path.0, start_at, start_at + 9)
         .await
         .map_err(resque_error_map)?;
-    Ok(HttpResponse::Ok().json(results))
+    Ok(HttpResponse::Ok().json(&results))
 }
 
 #[get("/failed")]
@@ -80,7 +80,7 @@ async fn failed_jobs(
             .await
             .map_err(resque_error_map)?,
     };
-    Ok(HttpResponse::Ok().json(response))
+    Ok(HttpResponse::Ok().json(&response))
 }
 
 #[get("/active_workers")]
@@ -90,7 +90,7 @@ async fn active_workers(state: web::Data<AppState>) -> actix_web::Result<HttpRes
             .await
             .map_err(resque_error_map)?,
     };
-    Ok(HttpResponse::Ok().json(workers))
+    Ok(HttpResponse::Ok().json(&workers))
 }
 
 #[delete("/failed")]

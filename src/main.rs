@@ -64,14 +64,14 @@ fn make_plugin_manager(
     Ok(plugin_manager)
 }
 
-#[actix_rt::main]
+#[actix_web::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     std::env::set_var("RUST_LOG", "info");
     env_logger::init();
     let app_config = load_config().unwrap();
     let redis = open_redis(&app_config).await?;
     let plugin_manager = make_plugin_manager(&app_config).expect("error loading plugins");
-    let sub_uri = std::env::var("SUB_URI").unwrap_or("".to_string());
+    let sub_uri = std::env::var("SUB_URI").unwrap_or_else(|_| "".to_string());
     let data = web::Data::new(handlers::AppState {
         redis,
         plugins: plugin_manager,
@@ -82,8 +82,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .app_data(data.clone())
             .service(
                 web::scope(&sub_uri)
-                    .route("/", web::get().to(handlers::home))
-                    .route("", web::get().to(handlers::home))
+                    // .route("/", web::get().to(handlers::home))
+                    // .route("", web::get().to(handlers::home))
                     .service(
                         web::scope("/api")
                             .service(handlers::resque_stats)
@@ -96,8 +96,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             .service(handlers::retry_failed_job)
                             .service(handlers::retry_all)
                             .service(handlers::delete_worker),
-                    )
-                    .route("{filename:.*}", web::get().to(handlers::static_assets)),
+                    ), // .route("{filename:.*}", web::get().to(handlers::static_assets)),
             )
     })
     .bind("0.0.0.0:8080")
