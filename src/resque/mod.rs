@@ -173,40 +173,48 @@ pub async fn remove_worker(con: &mut impl AsyncCommands, id: &str) -> redis::Red
 
 #[cfg(test)]
 mod tests {
+    use core::panic;
+
     use super::*;
     use mock_redis::RedisStore;
     use redis::Value;
     mod mock_redis;
-    #[test]
-    fn test_clear_queue() {
-        let mut store = RedisStore {
+    #[actix_rt::test]
+    async fn test_clear_queue() {
+        let store = RedisStore {
             received: Vec::new(),
             to_send: vec![Value::Int(1)],
         };
-        let rslt = clear_queue(&mut store, "default");
-        let cmd = std::str::from_utf8(store.received).unwrap();
+        let rslt = clear_queue(store, "default").await;
+        let args: Vec<&str> = store.received[0]
+            .args_iter()
+            .map(|arg| match arg {
+                redis::Arg::Simple(arg) => std::str::from_utf8(arg).unwrap(),
+                _ => panic!("unexpected cursor arg"),
+            })
+            .collect();
         assert_eq!(rslt, Ok(1));
-        assert!(cmd.contains("resque:default"));
+        assert!(args[1].contains("resque:default"));
     }
 
-    #[test]
-    fn test_get_failed() {
+    #[actix_rt::test]
+    async fn test_get_failed() {
         let mut store = RedisStore {
-            received: &mut Vec::new(),
-            to_send: &mut vec![Value::Bulk(vec![
+            received: Vec::new(),
+            to_send: vec![Value::Bulk(vec![
                 Value::Data(Vec::from("failed1")),
                 Value::Data(Vec::from("failed2")),
             ])],
         };
-        let rslt = get_failed(&mut store, 1, 100).unwrap();
+        let rslt = get_failed(store, 1, 100).await.unwrap();
         assert_eq!(rslt, vec!(String::from("failed1"), String::from("failed2")))
     }
 
-    #[test]
-    fn delete_failed_job_succeeds() {
+    #[actix_rt::test]
+    async fn delete_failed_job_succeeds() {
         let mut store = RedisStore {
-            received: &mut Vec::new(),
-            to_send: &mut vec![
+            received: Vec::new(),
+            to_send: vec![
                 Value::Int(1),
                 Value::Bulk(vec![
                     Value::Data(Vec::from("id1")),
@@ -216,35 +224,35 @@ mod tests {
                 Value::Int(3),
             ],
         };
-        let rslt = delete_failed_job(&mut store, "id2");
+        let rslt = delete_failed_job(store, "id2").await;
         assert_eq!(rslt, Ok(()));
     }
 
-    #[test]
-    fn delete_failed_job_queue_empties() {
+    #[actix_rt::test]
+    async fn delete_failed_job_queue_empties() {
         let mut store = RedisStore {
-            received: &mut Vec::new(),
-            to_send: &mut vec![
+            received: Vec::new(),
+            to_send: vec![
                 Value::Int(1),
                 Value::Bulk(vec![Value::Data(Vec::from("id1"))]),
                 Value::Int(3),
             ],
         };
-        if let Ok(()) = delete_failed_job(&mut store, "id2") {
+        if let Ok(()) = delete_failed_job(store, "id2").await {
             panic!("should not have found a value")
         }
     }
-    #[test]
-    fn queue_stats_populated() {
+    #[actix_rt::test]
+    async fn queue_stats_populated() {
         let mut store = RedisStore {
-            received: &mut Vec::new(),
-            to_send: &mut vec![
+            received: Vec::new(),
+            to_send: vec![
                 Value::Bulk(vec![Value::Data(Vec::from("default"))]),
                 Value::Int(123),
                 Value::Int(456),
             ],
         };
-        let rslt = queue_stats(&mut store).unwrap();
+        let rslt = queue_stats(store).await.unwrap();
         let expected = ResqueStats {
             available_queues: vec!["default".to_string()],
             failure_count: 123,
@@ -255,17 +263,17 @@ mod tests {
         assert_eq!(rslt.success_count, expected.success_count);
     }
 
-    #[test]
-    fn queue_stats_no_counts() {
+    #[actix_rt::test]
+    async fn queue_stats_no_counts() {
         let mut store = RedisStore {
-            received: &mut Vec::new(),
-            to_send: &mut vec![
+            received: Vec::new(),
+            to_send: vec![
                 Value::Bulk(vec![Value::Data(Vec::from("default"))]),
                 Value::Nil,
                 Value::Nil,
             ],
         };
-        let rslt = queue_stats(&mut store).unwrap();
+        let rslt = queue_stats(store).await.unwrap();
         let expected = ResqueStats {
             available_queues: vec!["default".to_string()],
             failure_count: 0,
