@@ -82,8 +82,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .app_data(data.clone())
             .service(
                 web::scope(&sub_uri)
-                    // .route("/", web::get().to(handlers::home))
-                    // .route("", web::get().to(handlers::home))
+                    .route("/", web::get().to(handlers::home))
+                    .route("", web::get().to(handlers::home))
                     .service(
                         web::scope("/api")
                             .service(handlers::resque_stats)
@@ -96,7 +96,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             .service(handlers::retry_failed_job)
                             .service(handlers::retry_all)
                             .service(handlers::delete_worker),
-                    ), // .route("{filename:.*}", web::get().to(handlers::static_assets)),
+                    )
+                    .route("{filename:.*}", web::get().to(handlers::static_assets)),
             )
     })
     .bind("0.0.0.0:8080")

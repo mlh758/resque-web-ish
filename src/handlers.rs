@@ -64,18 +64,19 @@ async fn failed_jobs(
     state: web::Data<AppState>,
 ) -> actix_web::Result<HttpResponse> {
     let start_at = query.from_job.unwrap_or(0);
+    let jobs = resque::get_failed(state.redis.clone(), start_at, start_at + 9)
+        .await
+        .map_err(resque_error_map)?
+        .into_iter()
+        .map(
+            |s| match serde_json::from_str(&s).map_err(resque_error_map) {
+                Ok(v) => v,
+                Err(_) => serde_json::json!({"error": "failed to parse job"}),
+            },
+        )
+        .collect();
     let response = FailedJobs {
-        jobs: resque::get_failed(state.redis.clone(), start_at, start_at + 9)
-            .await
-            .map_err(resque_error_map)?
-            .into_iter()
-            .map(
-                |s| match serde_json::from_str(&s).map_err(resque_error_map) {
-                    Ok(v) => v,
-                    Err(_) => serde_json::json!({"error": "failed to parse job"}),
-                },
-            )
-            .collect(),
+        jobs,
         total_failed: resque::current_failures(state.redis.clone())
             .await
             .map_err(resque_error_map)?,
